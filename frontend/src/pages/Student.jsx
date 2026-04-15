@@ -8,8 +8,9 @@ import { Link } from 'react-router-dom';
 const Student = () => {
   const [studentId, setStudentId] = useState(localStorage.getItem('studentId') || '');
   const [studentName, setStudentName] = useState(localStorage.getItem('studentName') || '');
-  const [status, setStatus] = useState('IDLE'); // IDLE, SCANNING, SUBMITTING, SUCCESS, ERROR
+  const [status, setStatus] = useState('IDLE'); // IDLE, SCANNING, IDENTIFYING, SUBMITTING, SUCCESS, ERROR
   const [errorMessage, setErrorMessage] = useState('');
+  const [scannedData, setScannedData] = useState(null);
 
   useEffect(() => {
     if (studentId) localStorage.setItem('studentId', studentId);
@@ -17,7 +18,6 @@ const Student = () => {
   }, [studentId, studentName]);
 
   const startScanning = () => {
-    if (!studentId.trim() || !studentName.trim()) return;
     setStatus('SCANNING');
   };
 
@@ -32,8 +32,9 @@ const Student = () => {
         try {
           const data = JSON.parse(decodedText);
           if (data.sessionId && data.token) {
+            setScannedData(data);
             await scanner.clear();
-            submitAttendance(data.sessionId, data.token);
+            setStatus('IDENTIFYING');
           } else {
             setErrorMessage("INCOMPATIBLE_DATA_SIGNATURE");
             setStatus('ERROR');
@@ -45,17 +46,17 @@ const Student = () => {
           scanner.clear().catch(() => {});
         }
       }, (error) => {
-        // Only log specific errors to avoid console spam
         if (error?.includes("NotFoundException")) return; 
-        console.warn("QR_HINT:", error);
       });
       return () => { scanner.clear().catch(e => {}); };
     }
   }, [status]);
 
-  const submitAttendance = async (sessionId, token) => {
+  const submitAttendance = async () => {
+    if (!studentId || !studentName) return;
+    const { sessionId, token } = scannedData;
+    
     setStatus('SUBMITTING');
-    // Increased timeout to 15 seconds for slower GPS
     const getPosition = () => new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { 
       enableHighAccuracy: true,
       timeout: 15000,
@@ -66,14 +67,13 @@ const Student = () => {
       const position = await getPosition();
       const { latitude, longitude } = position.coords;
       
-      const response = await axios.post('/api/mark-attendance', {
+      await axios.post('/api/mark-attendance', {
         sessionId, token, studentId, studentName, location: { lat: latitude, lng: longitude }
       });
       
       setStatus('SUCCESS');
     } catch (err) {
       console.error("Submission Error:", err);
-      // Show the EXACT error from the server if possible
       const msg = err.response?.data?.error || err.message || "Unknown Connection Error";
       setErrorMessage(msg);
       setStatus('ERROR');
@@ -92,15 +92,36 @@ const Student = () => {
            <div className="w-16 h-16 glass border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-[0_0_20px_rgba(34,211,238,0.2)]">
               <Radio size={28} className="text-cyan-400 animate-pulse" />
            </div>
-           <h1 className="text-4xl font-black text-white tracking-tighter uppercase italic italic leading-none mb-2">Unit Uplink</h1>
-           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Biometric Handshake Active v2.0</p>
+           <h1 className="text-4xl font-black text-white tracking-tighter uppercase italic leading-none mb-2">Unit Uplink</h1>
+           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Biometric Handshake Active v3.0</p>
         </div>
 
         <div className="p-10 md:p-14">
           <AnimatePresence mode="wait">
             {status === 'IDLE' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
+                 <Scan size={48} className="text-cyan-500 mx-auto mb-10 opacity-20" />
+                 <h2 className="text-2xl font-black text-white mb-8 uppercase tracking-widest italic">Ready for Scanning</h2>
+                 <button onClick={startScanning} className="btn-neon w-full justify-center">
+                   INITIALIZE CAMERA <ChevronRight size={18} />
+                 </button>
+              </motion.div>
+            )}
+
+            {status === 'SCANNING' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
+                <div id="reader" className="w-full rounded-[2rem] overflow-hidden border border-cyan-500/20 shadow-[0_0_80px_rgba(34,211,238,0.1)] mb-10"></div>
+                <button onClick={() => setStatus('IDLE')} className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em] hover:text-red-500 transition-colors">Abort Procedure [ESC]</button>
+              </motion.div>
+            )}
+
+            {status === 'IDENTIFYING' && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
                 <div className="space-y-6">
+                   <div className="p-4 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 text-center mb-8">
+                       <p className="text-[9px] font-black text-cyan-400 uppercase tracking-widest">Session Validated</p>
+                       <p className="text-white font-bold uppercase mt-1">Uplink Connected</p>
+                   </div>
                   <div>
                     <label className="block text-[9px] font-black text-slate-600 uppercase tracking-[0.4em] mb-3 ml-1 italic">Verified Subject Name</label>
                     <div className="relative group">
@@ -116,20 +137,9 @@ const Student = () => {
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={startScanning} 
-                  disabled={!studentId || !studentName}
-                  className="btn-neon w-full justify-center disabled:opacity-30 disabled:grayscale"
-                >
-                  INITIALIZE CAMERA SUITE <ChevronRight size={18} />
+                <button onClick={submitAttendance} disabled={!studentId || !studentName} className="btn-neon w-full justify-center">
+                  CONFIRM IDENTITY <CheckCircle size={18} className="ml-2" />
                 </button>
-              </motion.div>
-            )}
-
-            {status === 'SCANNING' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center">
-                <div id="reader" className="w-full rounded-[2rem] overflow-hidden border border-cyan-500/20 shadow-[0_0_80px_rgba(34,211,238,0.1)] mb-10"></div>
-                <button onClick={() => setStatus('IDLE')} className="text-[10px] font-black text-slate-600 uppercase tracking-[0.4em] hover:text-red-500 transition-colors">Abort Procedure [ESC]</button>
               </motion.div>
             )}
 
@@ -149,8 +159,8 @@ const Student = () => {
                   <CheckCircle size={48} fill="currentColor" className="text-emerald-500/5" />
                 </div>
                 <h2 className="text-5xl font-black text-white mb-4 italic tracking-tighter">APPROVED.</h2>
-                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-16 leading-relaxed">Attendance for <span className="text-cyan-400 underline underline-offset-4 decoration-2">{studentName}</span> has been archived in the secure ledger.</p>
-                <button onClick={() => setStatus('IDLE')} className="btn-ghost w-full">Mark Another Protocol</button>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-16 leading-relaxed">Attendance for <span className="text-cyan-400 underline underline-offset-4 decoration-2">{studentName}</span> has been archived.</p>
+                <button onClick={() => setStatus('IDLE')} className="btn-ghost w-full">Back to Start</button>
               </motion.div>
             )}
 
