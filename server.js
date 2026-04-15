@@ -21,8 +21,8 @@ app.use(express.json());
 const sessionRoutes = require('./routes/sessionRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 
-app.use('/', sessionRoutes);
-app.use('/', attendanceRoutes);
+app.use('/api', sessionRoutes);
+app.use('/api', attendanceRoutes);
 
 // Root route
 app.get('/api/health', (req, res) => {

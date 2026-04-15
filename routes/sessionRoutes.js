@@ -28,7 +28,7 @@ router.post('/create-session', async (req, res) => {
 });
 
 // Helper: Get all active sessions
-router.get('/', async (req, res) => {
+router.get('/sessions', async (req, res) => {
   try {
     const sessions = await Session.find({ isActive: true });
     res.json(sessions);
