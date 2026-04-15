@@ -137,9 +137,37 @@ const Student = () => {
                   <div className="absolute bottom-8 right-8 w-8 h-8 border-r-4 border-b-4 border-cyan-400 rounded-br-lg"></div>
                 </div>
                 
-                <button onClick={() => setStatus('IDLE')} className="flex items-center gap-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.4em] hover:text-red-500 transition-colors">
+                <button onClick={() => setStatus('IDLE')} className="flex items-center gap-3 text-[10px] font-black text-slate-600 uppercase tracking-[0.4em] hover:text-red-500 transition-colors mb-4">
                   <RefreshCw size={14} /> Abort Procedure
                 </button>
+
+                <div className="w-full flex flex-col items-center">
+                   <div className="w-full h-px bg-white/5 mb-4" />
+                   <input 
+                     type="file" 
+                     id="qr-file-upload" 
+                     accept="image/*" 
+                     className="hidden" 
+                     onChange={async (e) => {
+                       const file = e.target.files[0];
+                       if (!file) return;
+                       const localScanner = new Html5Qrcode("reader");
+                       try {
+                         const text = await localScanner.scanFile(file, true);
+                         const data = JSON.parse(text);
+                         if (data.sessionId && data.token) {
+                           setScannedData(data);
+                           setStatus('IDENTIFYING');
+                         }
+                       } catch (err) {
+                         alert("Could not detect a QR code in that image. Try a clearer photo.");
+                       }
+                     }}
+                   />
+                   <label htmlFor="qr-file-upload" className="text-cyan-400 font-extrabold text-[9px] uppercase tracking-widest cursor-pointer hover:text-white transition-colors">
+                     Camera Blocked? Upload Screenshot
+                   </label>
+                </div>
               </motion.div>
             )}
 
