@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Scan, ArrowLeft, CheckCircle, Smartphone, AlertCircle, MapPin, ChevronRight, User, KeyRound, Radio } from 'lucide-react';
+import { Scan, ArrowLeft, CheckCircle, Smartphone, AlertCircle, MapPin, ChevronRight, User, KeyRound, Radio, Camera } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Student = () => {
@@ -22,33 +22,36 @@ const Student = () => {
   };
 
   useEffect(() => {
+    let html5QrCode;
     if (status === 'SCANNING') {
-      const scanner = new Html5QrcodeScanner("reader", { 
-        fps: 20, 
-        qrbox: { width: 280, height: 280 },
-        aspectRatio: 1.0,
-      });
-      scanner.render(async (decodedText) => {
-        try {
-          const data = JSON.parse(decodedText);
-          if (data.sessionId && data.token) {
-            setScannedData(data);
-            await scanner.clear();
-            setStatus('IDENTIFYING');
-          } else {
-            setErrorMessage("INCOMPATIBLE_DATA_SIGNATURE");
-            setStatus('ERROR');
-            scanner.clear().catch(() => {});
+      html5QrCode = new Html5Qrcode("reader");
+      const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+
+      html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        async (decodedText) => {
+          try {
+            const data = JSON.parse(decodedText);
+            if (data.sessionId && data.token) {
+              setScannedData(data);
+              await html5QrCode.stop();
+              setStatus('IDENTIFYING');
+            }
+          } catch (e) {
+            console.error("QR Parse Error");
           }
-        } catch (e) {
-          setErrorMessage("INVALID_FORMAT: NOT_A_SECURE_TOKEN");
-          setStatus('ERROR');
-          scanner.clear().catch(() => {});
         }
-      }, (error) => {
-        if (error?.includes("NotFoundException")) return; 
+      ).catch(err => {
+        setErrorMessage("CAMERA_INITIALIZATION_FAILED: " + err);
+        setStatus('ERROR');
       });
-      return () => { scanner.clear().catch(e => {}); };
+
+      return () => {
+        if (html5QrCode && html5QrCode.isScanning) {
+          html5QrCode.stop().catch(() => {});
+        }
+      };
     }
   }, [status]);
 
